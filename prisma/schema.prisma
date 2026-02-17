@@ -1,0 +1,116 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Property stage enum - represents the lifecycle of a tax lien property
+enum PropertyStage {
+  PURCHASED
+  RR_FORECLOSED
+  QUIET_TITLED
+  FOR_SALE
+  SOLD
+}
+
+// Property type enum
+enum PropertyType {
+  RESIDENTIAL
+  COMMERCIAL
+  LAND
+  INDUSTRIAL
+  AGRICULTURAL
+  OTHER
+}
+
+// Expense category enum
+enum ExpenseCategory {
+  LEGAL
+  MAINTENANCE
+  TAXES
+  INSURANCE
+  MARKETING
+  TITLE_WORK
+  AUCTION_FEE
+  OTHER
+}
+
+model User {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  name          String?
+  password      String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  properties    Property[]
+}
+
+model Property {
+  id                String          @id @default(cuid())
+  userId            String
+  
+  // Property Information
+  parcelNumber      String
+  address           String
+  priorOwner        String?
+  propertyType      PropertyType    @default(RESIDENTIAL)
+  
+  // Financial Information
+  bidAmount         Float           // Amount paid at auction
+  currentValue      Float           // Current estimated value
+  askingPrice       Float?          // Asking price when listed for sale
+  
+  // Stage Tracking
+  stage             PropertyStage   @default(PURCHASED)
+  stageHistory      StageHistory[]
+  
+  // Sale Information
+  soldAmount        Float?
+  soldDate          DateTime?
+  
+  // Expenses
+  expenses          Expense[]
+  
+  // Timestamps
+  purchaseDate      DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([stage])
+}
+
+model StageHistory {
+  id              String        @id @default(cuid())
+  propertyId      String
+  fromStage       PropertyStage?
+  toStage         PropertyStage
+  changedAt       DateTime      @default(now())
+  
+  property        Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  @@index([propertyId])
+}
+
+model Expense {
+  id              String          @id @default(cuid())
+  propertyId      String
+  category        ExpenseCategory
+  description     String
+  amount          Float
+  date            DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  property        Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  @@index([propertyId])
+}
