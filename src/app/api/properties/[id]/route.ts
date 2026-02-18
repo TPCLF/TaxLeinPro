@@ -60,6 +60,7 @@ export async function PUT(
       stage,
       soldAmount,
       soldDate,
+      purchaseDate,
     } = body
     
     // If stage changed, record in history
@@ -84,6 +85,7 @@ export async function PUT(
     if (stage !== undefined) updateData.stage = stage
     if (soldAmount !== undefined) updateData.soldAmount = soldAmount ? parseFloat(soldAmount) : null
     if (soldDate !== undefined) updateData.soldDate = soldDate ? new Date(soldDate) : null
+    if (purchaseDate !== undefined) updateData.purchaseDate = new Date(purchaseDate)
     
     const property = await db.property.update({
       where: { id },

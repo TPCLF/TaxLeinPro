@@ -10,12 +10,25 @@ import {
   BarChart3,
   PieChart,
   Activity,
-  Minus
+  Minus,
+  Wallet,
+  Receipt,
+  Percent
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { format } from "date-fns"
 import { cn } from "@/lib/utils"
+
+interface SoldPropertyMetric {
+  id: string
+  salePrice: number
+  costBasis: number
+  profit: number
+  holdTimeDays: number
+  bidAmount: number
+  expensesTotal: number
+}
 
 interface AnalyticsData {
   totalProperties: number
@@ -23,14 +36,14 @@ interface AnalyticsData {
   soldProperties: number
   totalInvestment: number
   totalExpenses: number
-  totalCost: number
+  portfolioValue: number
   totalEarnings: number
+  totalCostSold: number
   netProfit: number
   roi: number
   avgHoldTime: number
-  avgCostToAcquire: number
   avgReturn: number
-  portfolioValue: number
+  avgProfit: number
   stageCounts: {
     PURCHASED: number
     RR_FORECLOSED: number
@@ -48,6 +61,7 @@ interface AnalyticsData {
       parcelNumber: string
     }
   }>
+  soldPropertyMetrics?: SoldPropertyMetric[]
 }
 
 interface AnalyticsDashboardProps {
@@ -97,23 +111,25 @@ function StatCard({
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
-          {Icon && (
-            <div className="p-2 rounded-full bg-muted">
-              <Icon className="h-4 w-4 text-muted-foreground" />
-            </div>
-          )}
-          {trend !== undefined && (
-            <div className={cn(
-              "p-1 rounded-full",
-              trend === "up" && "bg-emerald-100 dark:bg-emerald-900",
-              trend === "down" && "bg-red-100 dark:bg-red-900",
-              trend === "neutral" && "bg-muted"
-            )}>
-              {trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
-              {trend === "down" && <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />}
-              {trend === "neutral" && <Minus className="h-4 w-4 text-muted-foreground" />}
-            </div>
-          )}
+          <div className="flex items-center gap-1">
+            {Icon && (
+              <div className="p-2 rounded-full bg-muted">
+                <Icon className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+            {trend !== undefined && (
+              <div className={cn(
+                "p-1 rounded-full",
+                trend === "up" && "bg-emerald-100 dark:bg-emerald-900",
+                trend === "down" && "bg-red-100 dark:bg-red-900",
+                trend === "neutral" && "bg-muted"
+              )}>
+                {trend === "up" && <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                {trend === "down" && <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />}
+                {trend === "neutral" && <Minus className="h-4 w-4 text-muted-foreground" />}
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -148,60 +164,91 @@ export function AnalyticsDashboard({ data, isLoading }: AnalyticsDashboardProps)
     return "neutral"
   }
 
+  const formatCurrency = (value: number) => {
+    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  }
+
+  const formatPercent = (value: number) => {
+    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+  }
+
+  const formatDays = (days: number) => {
+    if (days < 30) return `${Math.round(days)} days`
+    if (days < 365) return `${Math.round(days / 30)} months`
+    return `${(days / 365).toFixed(1)} years`
+  }
+
   return (
     <div className="space-y-4">
-      {/* Key Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          title="Net Profit"
-          value={`${data.netProfit >= 0 ? "+" : ""}$${data.netProfit.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
-          subtitle="Total earnings minus costs"
-          icon={DollarSign}
-          trend={getTrend(data.netProfit)}
-        />
-        <StatCard
-          title="ROI"
-          value={`${data.roi.toFixed(1)}%`}
-          subtitle="Return on investment"
-          icon={BarChart3}
-          trend={getTrend(data.roi)}
-        />
-        <StatCard
-          title="Avg Hold Time"
-          value={`${Math.round(data.avgHoldTime)} days`}
-          subtitle="For sold properties"
-          icon={Calendar}
-        />
-        <StatCard
-          title="Portfolio Value"
-          value={`$${data.portfolioValue.toLocaleString()}`}
-          subtitle={`${data.activeProperties} active properties`}
-          icon={Building2}
-        />
+      {/* Key Performance Metrics - Sold Properties */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" />
+          Performance (Sold Properties)
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            title="Net Profit"
+            value={`${data.netProfit >= 0 ? '+' : ''}${formatCurrency(data.netProfit)}`}
+            subtitle={data.soldProperties > 0 ? `${data.soldProperties} properties sold` : "No sales yet"}
+            icon={DollarSign}
+            trend={getTrend(data.netProfit)}
+            className={data.netProfit >= 0 ? "border-emerald-200 dark:border-emerald-800" : "border-red-200 dark:border-red-800"}
+          />
+          <StatCard
+            title="ROI"
+            value={formatPercent(data.roi)}
+            subtitle={data.totalCostSold > 0 ? `On ${formatCurrency(data.totalCostSold)} invested` : "No investment returned"}
+            icon={Percent}
+            trend={getTrend(data.roi)}
+          />
+          <StatCard
+            title="Avg Hold Time"
+            value={formatDays(data.avgHoldTime)}
+            subtitle={data.soldProperties > 0 ? "Average time to sell" : "No sales yet"}
+            icon={Calendar}
+          />
+          <StatCard
+            title="Avg Return"
+            value={formatCurrency(data.avgReturn)}
+            subtitle={data.soldProperties > 0 ? "Per property sold" : "No sales yet"}
+            icon={BarChart3}
+          />
+        </div>
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          title="Total Invested"
-          value={`$${data.totalInvestment.toLocaleString()}`}
-          subtitle="Bid amounts only"
-        />
-        <StatCard
-          title="Total Expenses"
-          value={`$${data.totalExpenses.toLocaleString()}`}
-          subtitle="All recorded expenses"
-        />
-        <StatCard
-          title="Total Earnings"
-          value={`$${data.totalEarnings.toLocaleString()}`}
-          subtitle="From sold properties"
-        />
-        <StatCard
-          title="Avg Return"
-          value={`$${data.avgReturn.toLocaleString()}`}
-          subtitle="Per sold property"
-        />
+      {/* Portfolio Overview - All Properties */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <Wallet className="h-4 w-4" />
+          Portfolio Overview (All Properties)
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard
+            title="Total Invested"
+            value={formatCurrency(data.totalInvestment)}
+            subtitle="All bid amounts"
+            icon={Wallet}
+          />
+          <StatCard
+            title="Total Expenses"
+            value={formatCurrency(data.totalExpenses)}
+            subtitle="All recorded expenses"
+            icon={Receipt}
+          />
+          <StatCard
+            title="Portfolio Value"
+            value={formatCurrency(data.portfolioValue)}
+            subtitle={`${data.activeProperties} active properties`}
+            icon={Building2}
+          />
+          <StatCard
+            title="Total Earnings"
+            value={formatCurrency(data.totalEarnings)}
+            subtitle="From sold properties"
+            icon={DollarSign}
+          />
+        </div>
       </div>
 
       {/* Stage Distribution & Recent Activity */}
@@ -254,7 +301,7 @@ export function AnalyticsDashboard({ data, isLoading }: AnalyticsDashboardProps)
                 <div className="space-y-3">
                   {data.recentActivity.map((activity) => (
                     <div key={activity.id} className="flex items-start gap-3 pb-3 border-b last:border-0">
-                      <div className={cn("w-2 h-2 mt-1.5 rounded-full", STAGE_COLORS[activity.toStage])} />
+                      <div className={cn("w-2 h-2 mt-1.5 rounded-full flex-shrink-0", STAGE_COLORS[activity.toStage])} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
                           {activity.property.address}
@@ -277,6 +324,47 @@ export function AnalyticsDashboard({ data, isLoading }: AnalyticsDashboardProps)
           </CardContent>
         </Card>
       </div>
+
+      {/* Sold Properties Detail */}
+      {data.soldPropertyMetrics && data.soldPropertyMetrics.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Sold Properties Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Sale Price</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Cost Basis</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Profit/Loss</th>
+                    <th className="text-left py-2 px-2 font-medium text-muted-foreground">Hold Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.soldPropertyMetrics.map((metric) => (
+                    <tr key={metric.id} className="border-b last:border-0">
+                      <td className="py-2 px-2">{formatCurrency(metric.salePrice)}</td>
+                      <td className="py-2 px-2">{formatCurrency(metric.costBasis)}</td>
+                      <td className={cn(
+                        "py-2 px-2 font-medium",
+                        metric.profit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                      )}>
+                        {metric.profit >= 0 ? '+' : ''}{formatCurrency(metric.profit)}
+                      </td>
+                      <td className="py-2 px-2">{formatDays(metric.holdTimeDays)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
