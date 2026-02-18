@@ -15,43 +15,67 @@ export async function GET() {
       },
     })
     
-    // Calculate analytics
+    // Separate sold and active properties
     const soldProperties = properties.filter(p => p.stage === "SOLD")
     const activeProperties = properties.filter(p => p.stage !== "SOLD")
     
-    // Total earnings from sold properties
-    const totalEarnings = soldProperties.reduce((sum, p) => sum + (p.soldAmount || 0), 0)
+    // ============================================
+    // PORTFOLIO OVERVIEW (All Properties)
+    // ============================================
     
-    // Total investment (bid amounts)
-    const totalInvestment = properties.reduce((sum, p) => sum + p.bidAmount, 0)
+    // Total invested across all properties (bid amounts)
+    const totalInvestedAll = properties.reduce((sum, p) => sum + p.bidAmount, 0)
     
-    // Total expenses
-    const totalExpenses = properties.reduce((sum, p) => {
+    // Total expenses across all properties
+    const totalExpensesAll = properties.reduce((sum, p) => {
       return sum + p.expenses.reduce((expSum, e) => expSum + e.amount, 0)
     }, 0)
     
-    // Total cost (investment + expenses)
-    const totalCost = totalInvestment + totalExpenses
+    // Portfolio value = current value of ACTIVE properties only
+    const portfolioValue = activeProperties.reduce((sum, p) => sum + p.currentValue, 0)
     
-    // Net profit
-    const netProfit = totalEarnings - totalCost
+    // ============================================
+    // PERFORMANCE METRICS (Sold Properties Only)
+    // ============================================
     
-    // ROI percentage
-    const roi = totalCost > 0 ? ((netProfit / totalCost) * 100) : 0
-    
-    // Average hold time for sold properties
-    const holdTimes = soldProperties.map(p => {
+    // Calculate per-sold-property metrics
+    const soldPropertyMetrics = soldProperties.map(p => {
+      const expensesTotal = p.expenses.reduce((sum, e) => sum + e.amount, 0)
+      const costBasis = p.bidAmount + expensesTotal // What we paid + expenses
+      const salePrice = p.soldAmount || 0
+      const profit = salePrice - costBasis
+      
+      // Hold time in days (only for sold properties)
       const soldDate = p.soldDate || new Date()
       const purchaseDate = p.purchaseDate
-      return (soldDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24) // days
+      const holdTimeDays = (soldDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24)
+      
+      return {
+        id: p.id,
+        salePrice,
+        costBasis,
+        profit,
+        holdTimeDays,
+        bidAmount: p.bidAmount,
+        expensesTotal,
+      }
     })
-    const avgHoldTime = holdTimes.length > 0 
-      ? holdTimes.reduce((sum, t) => sum + t, 0) / holdTimes.length 
-      : 0
     
-    // Average cost to acquire (bid + expenses before sale)
-    const avgCostToAcquire = properties.length > 0 
-      ? totalCost / properties.length 
+    // Total earnings = sum of all sale prices
+    const totalEarnings = soldPropertyMetrics.reduce((sum, m) => sum + m.salePrice, 0)
+    
+    // Total cost of SOLD properties (bid amounts + expenses for sold properties)
+    const totalCostSold = soldPropertyMetrics.reduce((sum, m) => sum + m.costBasis, 0)
+    
+    // Net profit = total earnings - total cost of sold properties
+    const netProfit = totalEarnings - totalCostSold
+    
+    // ROI = net profit / total cost of sold properties (percentage)
+    const roi = totalCostSold > 0 ? ((netProfit / totalCostSold) * 100) : 0
+    
+    // Average hold time = ONLY for sold properties
+    const avgHoldTime = soldPropertyMetrics.length > 0 
+      ? soldPropertyMetrics.reduce((sum, m) => sum + m.holdTimeDays, 0) / soldPropertyMetrics.length 
       : 0
     
     // Average return per sold property
@@ -59,10 +83,15 @@ export async function GET() {
       ? totalEarnings / soldProperties.length 
       : 0
     
-    // Portfolio value (current value of active properties)
-    const portfolioValue = activeProperties.reduce((sum, p) => sum + p.currentValue, 0)
+    // Average profit per sold property
+    const avgProfit = soldProperties.length > 0 
+      ? netProfit / soldProperties.length 
+      : 0
     
-    // Stats by stage
+    // ============================================
+    // STAGE DISTRIBUTION
+    // ============================================
+    
     const stageCounts = {
       PURCHASED: properties.filter(p => p.stage === "PURCHASED").length,
       RR_FORECLOSED: properties.filter(p => p.stage === "RR_FORECLOSED").length,
@@ -71,7 +100,10 @@ export async function GET() {
       SOLD: soldProperties.length,
     }
     
-    // Recent activity (last 10 stage changes)
+    // ============================================
+    // RECENT ACTIVITY
+    // ============================================
+    
     const recentActivity = await db.stageHistory.findMany({
       where: {
         property: { userId: user.id },
@@ -89,21 +121,33 @@ export async function GET() {
     })
     
     return NextResponse.json({
+      // Counts
       totalProperties: properties.length,
       activeProperties: activeProperties.length,
       soldProperties: soldProperties.length,
-      totalInvestment,
-      totalExpenses,
-      totalCost,
+      
+      // Portfolio Overview (all properties)
+      totalInvestment: totalInvestedAll,
+      totalExpenses: totalExpensesAll,
+      portfolioValue,
+      
+      // Performance Metrics (sold properties only)
       totalEarnings,
+      totalCostSold,
       netProfit,
       roi,
       avgHoldTime,
-      avgCostToAcquire,
       avgReturn,
-      portfolioValue,
+      avgProfit,
+      
+      // Stage distribution
       stageCounts,
+      
+      // Recent activity
       recentActivity,
+      
+      // Individual sold property metrics (for detailed view)
+      soldPropertyMetrics,
     })
   } catch (error) {
     console.error("Error fetching analytics:", error)

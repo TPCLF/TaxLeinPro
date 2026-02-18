@@ -269,6 +269,14 @@ export function PortfolioDashboard() {
   }
 
   const handleStageChange = async (id: string, stage: PropertyStage) => {
+    // If changing to SOLD, prompt for sale details
+    if (stage === "SOLD") {
+      const property = properties.find(p => p.id === id)
+      if (property) {
+        setMarkingSold(property)
+      }
+      return
+    }
     await updatePropertyMutation.mutateAsync({ id, data: { stage } })
   }
 
@@ -283,6 +291,13 @@ export function PortfolioDashboard() {
       } 
     })
     setMarkingSold(null)
+  }
+
+  const handleUpdatePurchaseDate = async (id: string, date: string) => {
+    await updatePropertyMutation.mutateAsync({ 
+      id, 
+      data: { purchaseDate: date } 
+    })
   }
 
   const handleAddExpense = async (data: Record<string, unknown>) => {
@@ -481,6 +496,7 @@ export function PortfolioDashboard() {
                   onDelete={(id) => setDeletingPropertyId(id)}
                   onViewExpenses={(p) => setViewingExpenses(p)}
                   onMarkSold={(p) => setMarkingSold(p)}
+                  onUpdatePurchaseDate={handleUpdatePurchaseDate}
                 />
               ))}
             </div>

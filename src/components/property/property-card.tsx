@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Property, PropertyStage } from "@prisma/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -15,7 +16,9 @@ import {
   Pencil,
   Trash2,
   TrendingUp,
-  Receipt
+  Receipt,
+  Check,
+  X
 } from "lucide-react"
 import { format } from "date-fns"
 import {
@@ -25,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
   RESIDENTIAL: "Residential",
@@ -50,6 +54,7 @@ interface PropertyCardProps {
   onDelete: (id: string) => void
   onViewExpenses: (property: Property) => void
   onMarkSold: (property: Property) => void
+  onUpdatePurchaseDate: (id: string, date: string) => void
 }
 
 export function PropertyCard({
@@ -59,12 +64,30 @@ export function PropertyCard({
   onDelete,
   onViewExpenses,
   onMarkSold,
+  onUpdatePurchaseDate,
 }: PropertyCardProps) {
+  const [isEditingDate, setIsEditingDate] = useState(false)
+  const [tempDate, setTempDate] = useState<string | null>(null)
+
+  // Use tempDate when editing, otherwise use property's purchaseDate
+  const displayDate = tempDate ?? new Date(property.purchaseDate).toISOString().split("T")[0]
+
   const totalExpenses = property.expenses.reduce((sum, e) => sum + e.amount, 0)
   const totalInvestment = property.bidAmount + totalExpenses
   const profit = property.stage === "SOLD" && property.soldAmount 
     ? property.soldAmount - totalInvestment 
     : null
+
+  const handleSaveDate = () => {
+    onUpdatePurchaseDate(property.id, displayDate)
+    setTempDate(null)
+    setIsEditingDate(false)
+  }
+
+  const handleCancelDate = () => {
+    setTempDate(null)
+    setIsEditingDate(false)
+  }
 
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-all duration-200 border-0 shadow-md bg-card">
@@ -209,10 +232,46 @@ export function PropertyCard({
           </div>
         )}
         
-        {/* Purchase Date */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground pt-2 border-t">
-          <Calendar className="h-3 w-3" />
-          <span>Purchased {format(new Date(property.purchaseDate), "MMM d, yyyy")}</span>
+        {/* Purchase Date - Clickable to Edit */}
+        <div className="flex items-center justify-between pt-2 border-t">
+          {isEditingDate ? (
+            <div className="flex items-center gap-2 w-full">
+              <Calendar className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <Input
+                type="date"
+                value={displayDate}
+                onChange={(e) => setTempDate(e.target.value)}
+                className="h-7 text-xs flex-1"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-emerald-600 hover:text-emerald-700"
+                onClick={handleSaveDate}
+              >
+                <Check className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={handleCancelDate}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsEditingDate(true)}
+              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer group"
+            >
+              <Calendar className="h-3 w-3" />
+              <span>
+                Purchased <span className="font-medium text-foreground group-hover:text-primary">{format(new Date(property.purchaseDate), "MMM d, yyyy")}</span>
+              </span>
+              <Pencil className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
         </div>
       </CardContent>
     </Card>
